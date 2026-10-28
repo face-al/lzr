@@ -219,6 +219,39 @@ func (ipMeta * pState) getHandshake( p * packet_metadata ) int {
 	return 0
 }
 
+func (ipMeta * pState) setHandshake( p * packet_metadata, handshakeNum int ) bool {
+	pKey := constructKey(p)
+	ps, ok := ipMeta.Get(pKey)
+	if ok {
+		ps.HandshakeNum = handshakeNum
+		ipMeta.Insert( pKey, ps )
+	}
+	return ok
+}
+
+//keep a copy of the first inconclusive response, or of a later HTTP 400
+//over an unknown one; the packet itself is reused for the next handshake
+func (ipMeta * pState) setFallback( p * packet_metadata, handshakeNum int ) bool {
+	pKey := constructKey(p)
+	ps, ok := ipMeta.Get(pKey)
+	if ok && (ps.Fallback == nil || (matchResponse(ps.Fallback.Data) == "unknown" && matchResponse(p.Data) != "unknown")) {
+		fallback := *p
+		fallback.syncHandshakeNum(handshakeNum)
+		ps.Fallback = &fallback
+		ipMeta.Insert( pKey, ps )
+	}
+	return ok
+}
+
+func (ipMeta * pState) getFallback( p * packet_metadata ) *packet_metadata {
+	pKey := constructKey(p)
+	ps, ok := ipMeta.Get(pKey)
+	if ok {
+		return ps.Fallback
+	}
+	return nil
+}
+
 func (ipMeta * pState) incrementCounter( p * packet_metadata ) bool {
 
 	pKey := constructKey(p)

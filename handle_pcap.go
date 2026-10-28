@@ -18,6 +18,7 @@ package lzr
 import (
 	//"fmt"
 	"log"
+	"slices"
 )
 
 func closeConnection(packet *packet_metadata, ipMeta *pState, writingQueue chan *packet_metadata, write bool, ackingFirewall bool) {
@@ -29,8 +30,10 @@ func closeConnection(packet *packet_metadata, ipMeta *pState, writingQueue chan 
 		log.Fatal(err)
 	}
 	//remove from state, we are done now
+	fallback := ipMeta.getFallback(packet)
 	packet = ipMeta.remove(packet)
 	if write {
+		packet = useFallback(packet, fallback)
 		packet.setHyperACKtive(ackingFirewall)
 
 		if !(!(packet.hasData()) && RecordOnlyData()) {
@@ -40,6 +43,43 @@ func closeConnection(packet *packet_metadata, ipMeta *pState, writingQueue chan 
 		}
 	}
 	return
+}
+
+// useFallback returns the first inconclusive response of a target when its
+// last handshake got no conclusive one; a later HTTP 400 still beats an
+// earlier unknown
+func useFallback(packet *packet_metadata, fallback *packet_metadata) *packet_metadata {
+	if fallback == nil || (packet.hasData() && !inconclusiveResponse(packet.Data)) {
+		return packet
+	}
+	if packet.hasData() && matchResponse(packet.Data) != "unknown" && matchResponse(fallback.Data) == "unknown" {
+		return packet
+	}
+	fallback.ACKed = packet.ACKed
+	return fallback
+}
+
+// retryHandshake moves an inconclusive response on to the next handshake,
+// or to tls for an HTTP 400, and reports whether it did. Needs timers of
+// the abandoned connection to be ignored (HandleTimeout Dport check).
+func retryHandshake(opts *options, packet *packet_metadata, ipMeta *pState, handshakeNum int,
+	isHyperACKtive bool, timeoutQueue chan *packet_metadata, writingQueue chan *packet_metadata) bool {
+
+	if isHyperACKtive || !inconclusiveResponse(packet.Data) {
+		return false
+	}
+	next := handshakeNum + 1
+	//do not jump over handshakes 0 and 1, where HAF filtering happens
+	if http400.MatchString(packet.Data) && !(handshakeNum == 0 && HyperACKtiveFiltering()) {
+		next = slices.Index(opts.Handshakes, "tls")
+	}
+	if next <= handshakeNum || next >= len(opts.Handshakes) {
+		return false
+	}
+	ipMeta.setFallback(packet, handshakeNum)
+	ipMeta.setHandshake(packet, next-1)
+	handleExpired(opts, packet, ipMeta, timeoutQueue, writingQueue)
+	return true
 }
 
 func HandlePcap(opts *options, packet *packet_metadata, ipMeta *pState, timeoutQueue chan *packet_metadata,
@@ -70,6 +110,10 @@ func HandlePcap(opts *options, packet *packet_metadata, ipMeta *pState, timeoutQ
 		// if not stopping here, send off to handle_expire
 		if ForceAllHandshakes() {
 			handleExpired(opts, packet, ipMeta, timeoutQueue, writingQueue)
+			return
+		}
+
+		if retryHandshake(opts, packet, ipMeta, handshakeNum, isHyperACKtive, timeoutQueue, writingQueue) {
 			return
 		}
 
