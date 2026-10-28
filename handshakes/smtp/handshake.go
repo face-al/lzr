@@ -2,8 +2,12 @@ package smtp
 
 import (
 	"github.com/stanford-esrg/lzr"
+	"regexp"
 	"strings"
 )
+
+// an SMTP reply starts with its code (RFC 5321 4.2)
+var replyCode = regexp.MustCompile(`^[2-5][0-9][0-9]([ -]|\r?\n)`)
 
 // Handshake implements the lzr.Handshake interface
 type HandshakeMod struct {
@@ -17,6 +21,11 @@ func (h *HandshakeMod) GetData( dst string ) []byte {
 
 func (h *HandshakeMod) Verify( data string ) string {
 
+    // so a greeting of another protocol that names smtp or echoes EHLO
+    // (an IMAP banner of host smtp.example.org, an ircd's 421) is not one
+    if !replyCode.MatchString(data) {
+        return ""
+    }
     dl :=  ToLower(data)
 	if strings.Contains( dl, "smtp" ) || strings.Contains( dl, "ehlo" ) {
          return "smtp"

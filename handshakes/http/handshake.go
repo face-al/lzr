@@ -30,6 +30,12 @@ func (h *HandshakeMod) GetData(dst string) []byte {
 
 func (h *HandshakeMod) Verify(data string) string {
 
+	// a TLS record, e.g. a ServerHello whose certificate names HTTP, is
+	// not an HTTP response
+	if len(data) >= 3 && data[0] >= 0x14 && data[0] <= 0x17 && data[1] == 0x03 && data[2] <= 0x04 {
+		return ""
+	}
+
 	if !strings.Contains(data, "HTTPS") &&
 		(strings.Contains(data, "HTTP") || strings.Contains(data, "html") ||
 			strings.Contains(data, "HTML") || strings.Contains(data, "<h1>")) {
