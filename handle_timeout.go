@@ -31,6 +31,11 @@ func HandleTimeout( opts *options, packet *packet_metadata, ipMeta * pState,
 		//fmt.Println("packet has already been dealt with in handle timeout! returning!")
         return
     }
+    //timer of an earlier handshake to this target: every handshake sends
+    //from a new source port, so the state belongs to a later connection now
+    if p, ok := ipMeta.find( packet ); ok && p.Dport != packet.Dport {
+        return
+    }
 
 
     //send again with just data (not apart of handshake)
