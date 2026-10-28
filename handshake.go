@@ -65,7 +65,14 @@ func hiearchizeFingerprint(fingerprint string) string {
 		}
 	}
 
-	if strings.Contains(fingerprint, "smtp") && strings.Contains(fingerprint, "ftp") {
+	// An LMTP greeting has an SMTP/FTP code and so also matches the smtp and
+	// ftp handshakes, while lmtp only matches a greeting that names LMTP;
+	// this must come before the smtp rules, and also wins over an ftp match. Requested handshakes still win
+	// above, so list lmtp before smtp and ftp in -handshakes (or use
+	// -priorityFingerprint).
+	if strings.Contains(fingerprint, "lmtp") {
+		return "lmtp"
+	} else if strings.Contains(fingerprint, "smtp") && strings.Contains(fingerprint, "ftp") {
 		return "smtp-ftp"
 	} else if strings.Contains(fingerprint, "telnet") && strings.Contains(fingerprint, "bgp") {
 		return "bgp"
