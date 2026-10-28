@@ -17,6 +17,7 @@ package lzr
 
 import (
 	//"fmt"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -99,6 +100,23 @@ func hiearchizeFingerprint(fingerprint string) string {
 }
 
 func fingerprintResponse(data string) string {
+	fingerprint := matchResponse(data)
+	fingerprintMap[fingerprint] += 1
+	return fingerprint
+}
+
+// an HTTP 400 is what HTTP servers, plain or behind TLS, send to bytes
+// they cannot parse, so it only tells that the service speaks HTTP
+var http400 = regexp.MustCompile(`^HTTP/1\.[01] 400( |\r\n)`)
+
+// inconclusiveResponse reports whether a response leaves the service open:
+// it matches no handshake, or it is an HTTP 400
+func inconclusiveResponse(data string) bool {
+	fingerprint := matchResponse(data)
+	return fingerprint == "unknown" || (fingerprint == "http" && http400.MatchString(data))
+}
+
+func matchResponse(data string) string {
 	fingerprint := ""
 	tfingerprint := ""
 	multiprint := false
@@ -122,7 +140,6 @@ func fingerprintResponse(data string) string {
 	if fingerprint == "" {
 		fingerprint = "unknown"
 	}
-	fingerprintMap[fingerprint] += 1
 	return fingerprint
 }
 

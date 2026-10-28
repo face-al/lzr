@@ -46,6 +46,7 @@ type packet_state struct {
 	EphemeralRespNum int
 	ParentSport      int //used for filter packets
 	Packet           *packet_metadata
+	Fallback         *packet_metadata //first inconclusive response, see retryHandshake
 }
 
 type packet_metadata struct {

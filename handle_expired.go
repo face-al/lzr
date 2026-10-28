@@ -43,6 +43,7 @@ func handleExpired(opts *options, packet *packet_metadata, ipMeta *pState,
 	if packet.HyperACKtive || (handshakeNum >= (len(opts.Handshakes) - 1)) ||
 		(packet.ExpectedRToLZR == SYN_ACK && !ForceAllHandshakes()) {
 		packet.syncHandshakeNum(handshakeNum)
+		packet = useFallback(packet, ipMeta.getFallback(packet))
 
 		//document failure if its a handshake response that hasnt succeeded before
 		if !packet.HyperACKtive && !(ForceAllHandshakes() && ipMeta.getData(packet) && !(packet.hasData())) {
