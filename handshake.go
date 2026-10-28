@@ -65,7 +65,14 @@ func hiearchizeFingerprint(fingerprint string) string {
 		}
 	}
 
-	if strings.Contains(fingerprint, "smtp") && strings.Contains(fingerprint, "ftp") {
+	// An SSL 2.0 SERVER-HELLO carries a binary certificate that can trip the
+	// substring checks of other handshakes (e.g. http, or telnet on the
+	// record length), while sslv2 only matches an exact record shape; this
+	// must come first. Requested handshakes still win above, so list sslv2
+	// before telnet in -handshakes (or use -priorityFingerprint).
+	if strings.Contains(fingerprint, "sslv2") {
+		return "sslv2"
+	} else if strings.Contains(fingerprint, "smtp") && strings.Contains(fingerprint, "ftp") {
 		return "smtp-ftp"
 	} else if strings.Contains(fingerprint, "telnet") && strings.Contains(fingerprint, "bgp") {
 		return "bgp"
