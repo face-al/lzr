@@ -38,10 +38,11 @@ func handleExpired(opts *options, packet *packet_metadata, ipMeta *pState,
 	//because:
 	//1. it was a HAF packet to begin with
 	//2. we have run out of handshakes
-	//3. doesnt synack
+	//3. doesnt synack (when forcing all handshakes: and never sent data,
+	//   e.g. zero-window hosts, which would otherwise go through every handshake)
 	//if ( packet.ExpectedRToLZR == SYN_ACK ||
 	if packet.HyperACKtive || (handshakeNum >= (len(opts.Handshakes) - 1)) ||
-		(packet.ExpectedRToLZR == SYN_ACK && !ForceAllHandshakes()) {
+		(packet.ExpectedRToLZR == SYN_ACK && !(ForceAllHandshakes() && ipMeta.getData(packet))) {
 		packet.syncHandshakeNum(handshakeNum)
 
 		//document failure if its a handshake response that hasnt succeeded before
@@ -60,10 +61,12 @@ func handleExpired(opts *options, packet *packet_metadata, ipMeta *pState,
 			packet = ipMeta.remove(packet)
 		}
 	} else { // lets try another handshake
-		//record all succesful fingerprints if forcing all handshakes
+		//record all succesful fingerprints if forcing all handshakes;
+		//queue a copy, updatePacketFlow reuses packet for the next handshake
 		if ForceAllHandshakes() && packet.hasData() {
 			packet.syncHandshakeNum(handshakeNum)
-			writingQueue <- packet
+			record := *packet
+			writingQueue <- &record
 		}
 
 		packet.updatePacketFlow()
