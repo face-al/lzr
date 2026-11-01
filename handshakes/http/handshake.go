@@ -29,6 +29,13 @@ func (h *HandshakeMod) GetData(dst string) []byte {
 }
 
 func (h *HandshakeMod) Verify(data string) string {
+	// an SSL 2.0 SERVER-HELLO record (2- or 3-byte header; type 4,
+	// SESSION-ID-HIT 0, X.509, version 2.0), whose certificate may name
+	// HTTP, is not an HTTP response
+	if (len(data) >= 7 && data[0]&0x80 != 0 && data[2:7] == "\x04\x00\x01\x00\x02") ||
+		(len(data) >= 8 && data[0]&0xc0 == 0 && data[2] == 0 && data[3:8] == "\x04\x00\x01\x00\x02") {
+		return ""
+	}
 
 	if !strings.Contains(data, "HTTPS") &&
 		(strings.Contains(data, "HTTP") || strings.Contains(data, "html") ||
