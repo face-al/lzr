@@ -49,17 +49,14 @@ func LZRMain() {
 	incoming := lzr.ConstructIncomingRoutine(options.Workers)
 	var incomingDone sync.WaitGroup
 	incomingDone.Add(options.Workers)
-	done := false
-	writing := false
 
 	// record to file
 	go func() {
 		for {
 			select {
 			case input := <-writingQueue:
-				writing = true
 				f.Record(input, options.Handshakes)
-				writing = false
+				lzr.MarkWritten()
 			}
 		}
 	}()
@@ -106,11 +103,9 @@ func LZRMain() {
 				}()
 				for {
 					if ipMeta.IsEmpty() /*|| infiniteLoop*/ {
-						done = true
 						break
 					}
 					if infiniteLoop {
-						done = true
 						break
 					}
 					//slow down to prevent CPU busy looping
@@ -194,11 +189,36 @@ func LZRMain() {
 	time.Sleep(time.Duration(options.Cooldown) * time.Second)
 
 	fmt.Fprintln(os.Stderr, "incoming is done, now waiting for handshakes timeout to be expired")
-	wgForHandshakeComplete.Wait()
-	fmt.Fprintln(os.Stderr, "handshakes are completed")
-
+	// the watchdog only returns after ipMeta has not changed for a whole
+	// interval (timeout x handshakes x 2 s), also when every target is
+	// already done; stop waiting as soon as ipMeta is empty. No new target
+	// enters ipMeta once input is closed, a target keeps its entry across
+	// handshakes, and it leaves ipMeta only after its record is queued.
+	handshakesDone := make(chan struct{})
+	go func() {
+		wgForHandshakeComplete.Wait()
+		close(handshakesDone)
+	}()
+	emptyCheck := time.NewTicker(time.Second)
+	defer emptyCheck.Stop()
+wait:
 	for {
-		if done && len(writingQueue) == 0 && !writing {
+		select {
+		case <-handshakesDone:
+			break wait
+		case <-emptyCheck.C:
+			if ipMeta.IsEmpty() {
+				fmt.Fprintln(os.Stderr, "Everything has been processed, Breaking.")
+				break wait
+			}
+		}
+	}
+	fmt.Fprintln(os.Stderr, "handshakes are completed, targets left:", ipMeta.Count())
+
+	// wait until the writer has written every queued record (it is then
+	// idle, so flushing is safe)
+	for {
+		if !lzr.WritesPending() {
 			if options.MemProfile != "" {
 				f, err := os.Create(options.MemProfile)
 				if err != nil {
@@ -214,6 +234,7 @@ func LZRMain() {
 			lzr.Summarize(elapsed)
 			return
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
 } //end of main
