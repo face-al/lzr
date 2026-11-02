@@ -27,7 +27,7 @@ func SendAck(opts *options, synack *packet_metadata, ipMeta *pState,
 	if synack.windowZero() {
 		if !(RecordOnlyData()) {
 			//not a real s/a
-			writingQueue <- synack
+			queueWrite(writingQueue, synack)
 		} else {
 			addToSummary(synack)
 		}

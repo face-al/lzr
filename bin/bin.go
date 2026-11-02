@@ -59,6 +59,7 @@ func LZRMain() {
 			case input := <-writingQueue:
 				writing = true
 				f.Record(input, options.Handshakes)
+				lzr.MarkWritten()
 				writing = false
 			}
 		}
@@ -194,11 +195,39 @@ func LZRMain() {
 	time.Sleep(time.Duration(options.Cooldown) * time.Second)
 
 	fmt.Fprintln(os.Stderr, "incoming is done, now waiting for handshakes timeout to be expired")
-	wgForHandshakeComplete.Wait()
+	// the watchdog only returns after ipMeta has not changed for two of its
+	// intervals (2 x timeout x handshakes x 2 s), also when every target is
+	// already done; stop waiting as soon as ipMeta is empty. Nothing is
+	// inserted any more (input closed), and a target leaves ipMeta only when
+	// it is finished.
+	handshakesDone := make(chan struct{})
+	go func() {
+		wgForHandshakeComplete.Wait()
+		close(handshakesDone)
+	}()
+	emptyCheck := time.NewTicker(time.Second)
+	defer emptyCheck.Stop()
+wait:
+	for {
+		select {
+		case <-handshakesDone:
+			break wait
+		case <-emptyCheck.C:
+			if ipMeta.IsEmpty() {
+				fmt.Fprintln(os.Stderr, "Everything has been processed, Breaking.")
+				done = true
+				break wait
+			}
+		}
+	}
 	fmt.Fprintln(os.Stderr, "handshakes are completed")
 
+	// a handler can queue its record just after removing the target from
+	// ipMeta (closeConnection): give it time, then wait until every queued
+	// record is written
+	time.Sleep(2 * time.Second)
 	for {
-		if done && len(writingQueue) == 0 && !writing {
+		if done && len(writingQueue) == 0 && !writing && !lzr.WritesPending() {
 			if options.MemProfile != "" {
 				f, err := os.Create(options.MemProfile)
 				if err != nil {

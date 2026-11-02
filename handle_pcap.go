@@ -34,7 +34,7 @@ func closeConnection(packet *packet_metadata, ipMeta *pState, writingQueue chan 
 		packet.setHyperACKtive(ackingFirewall)
 
 		if !(!(packet.hasData()) && RecordOnlyData()) {
-			writingQueue <- packet
+			queueWrite(writingQueue, packet)
 		} else {
 			addToSummary(packet)
 		}
