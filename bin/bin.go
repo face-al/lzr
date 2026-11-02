@@ -49,18 +49,14 @@ func LZRMain() {
 	incoming := lzr.ConstructIncomingRoutine(options.Workers)
 	var incomingDone sync.WaitGroup
 	incomingDone.Add(options.Workers)
-	done := false
-	writing := false
 
 	// record to file
 	go func() {
 		for {
 			select {
 			case input := <-writingQueue:
-				writing = true
 				f.Record(input, options.Handshakes)
 				lzr.MarkWritten()
-				writing = false
 			}
 		}
 	}()
@@ -107,11 +103,9 @@ func LZRMain() {
 				}()
 				for {
 					if ipMeta.IsEmpty() /*|| infiniteLoop*/ {
-						done = true
 						break
 					}
 					if infiniteLoop {
-						done = true
 						break
 					}
 					//slow down to prevent CPU busy looping
@@ -195,11 +189,11 @@ func LZRMain() {
 	time.Sleep(time.Duration(options.Cooldown) * time.Second)
 
 	fmt.Fprintln(os.Stderr, "incoming is done, now waiting for handshakes timeout to be expired")
-	// the watchdog only returns after ipMeta has not changed for two of its
-	// intervals (2 x timeout x handshakes x 2 s), also when every target is
-	// already done; stop waiting as soon as ipMeta is empty. Nothing is
-	// inserted any more (input closed), and a target leaves ipMeta only when
-	// it is finished.
+	// the watchdog only returns after ipMeta has not changed for a whole
+	// interval (timeout x handshakes x 2 s), also when every target is
+	// already done; stop waiting as soon as ipMeta is empty. No new target
+	// enters ipMeta once input is closed, a target keeps its entry across
+	// handshakes, and it leaves ipMeta only after its record is queued.
 	handshakesDone := make(chan struct{})
 	go func() {
 		wgForHandshakeComplete.Wait()
@@ -215,19 +209,16 @@ wait:
 		case <-emptyCheck.C:
 			if ipMeta.IsEmpty() {
 				fmt.Fprintln(os.Stderr, "Everything has been processed, Breaking.")
-				done = true
 				break wait
 			}
 		}
 	}
-	fmt.Fprintln(os.Stderr, "handshakes are completed")
+	fmt.Fprintln(os.Stderr, "handshakes are completed, targets left:", ipMeta.Count())
 
-	// a handler can queue its record just after removing the target from
-	// ipMeta (closeConnection): give it time, then wait until every queued
-	// record is written
-	time.Sleep(2 * time.Second)
+	// wait until the writer has written every queued record (it is then
+	// idle, so flushing is safe)
 	for {
-		if done && len(writingQueue) == 0 && !writing && !lzr.WritesPending() {
+		if !lzr.WritesPending() {
 			if options.MemProfile != "" {
 				f, err := os.Create(options.MemProfile)
 				if err != nil {
@@ -243,6 +234,7 @@ wait:
 			lzr.Summarize(elapsed)
 			return
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
 } //end of main

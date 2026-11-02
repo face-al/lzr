@@ -28,8 +28,10 @@ func closeConnection(packet *packet_metadata, ipMeta *pState, writingQueue chan 
 	if err != nil {
 		log.Fatal(err)
 	}
-	//remove from state, we are done now
-	packet = ipMeta.remove(packet)
+	//queue the record before removing the target from state, so main
+	//never sees an empty state with a record still to queue
+	packetKey := constructKey(packet)
+	packet.ACKed = ipMeta.getAck(packet)
 	if write {
 		packet.setHyperACKtive(ackingFirewall)
 
@@ -39,6 +41,8 @@ func closeConnection(packet *packet_metadata, ipMeta *pState, writingQueue chan 
 			addToSummary(packet)
 		}
 	}
+	//remove from state, we are done now
+	ipMeta.Remove(packetKey)
 	return
 }
 
