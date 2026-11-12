@@ -65,7 +65,13 @@ func hiearchizeFingerprint(fingerprint string) string {
 		}
 	}
 
-	if strings.Contains(fingerprint, "smtp") && strings.Contains(fingerprint, "ftp") {
+	// A ManageSieve capability list names Sieve extensions such as
+	// imap4flags or imapsieve, and Cyrus 3 names itself "Cyrus IMAP", so the
+	// imap handshake also matches it. Requested handshakes still win above, so list
+	// managesieve before imap in -handshakes (or use -priorityFingerprint).
+	if strings.Contains(fingerprint, "managesieve") {
+		return "managesieve"
+	} else if strings.Contains(fingerprint, "smtp") && strings.Contains(fingerprint, "ftp") {
 		return "smtp-ftp"
 	} else if strings.Contains(fingerprint, "telnet") && strings.Contains(fingerprint, "bgp") {
 		return "bgp"
