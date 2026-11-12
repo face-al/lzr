@@ -65,7 +65,14 @@ func hiearchizeFingerprint(fingerprint string) string {
 		}
 	}
 
-	if strings.Contains(fingerprint, "smtp") && strings.Contains(fingerprint, "ftp") {
+	// An XMPP stream header can trip the substring checks of other
+	// handshakes (e.g. ftp, ssh, smtp or imap in the server's domain), while
+	// xmpp only matches a stream header; this must come before the smtp
+	// rules. Requested handshakes still win above, so list xmpp first in
+	// -handshakes (or use -priorityFingerprint).
+	if strings.Contains(fingerprint, "xmpp") {
+		return "xmpp"
+	} else if strings.Contains(fingerprint, "smtp") && strings.Contains(fingerprint, "ftp") {
 		return "smtp-ftp"
 	} else if strings.Contains(fingerprint, "telnet") && strings.Contains(fingerprint, "bgp") {
 		return "bgp"
