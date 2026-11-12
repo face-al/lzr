@@ -65,7 +65,13 @@ func hiearchizeFingerprint(fingerprint string) string {
 		}
 	}
 
-	if strings.Contains(fingerprint, "smtp") && strings.Contains(fingerprint, "ftp") {
+	// An NNTP greeting is free text that may name e.g. an smtp or ftp host,
+	// while no other protocol greets with an NNTP code; this must come before
+	// the smtp rules. Requested handshakes still win above, so list nntp
+	// before smtp, ftp and http in -handshakes (or use -priorityFingerprint).
+	if strings.Contains(fingerprint, "nntp") {
+		return "nntp"
+	} else if strings.Contains(fingerprint, "smtp") && strings.Contains(fingerprint, "ftp") {
 		return "smtp-ftp"
 	} else if strings.Contains(fingerprint, "telnet") && strings.Contains(fingerprint, "bgp") {
 		return "bgp"
